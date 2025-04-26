@@ -245,7 +245,7 @@ def install_uf2_procedure(download_url, target_filename):
 # -------- GitHub + GUI Widgets --------
 
 GITHUB_API_LATEST = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
-RAW_IMAGE_URL = "https://raw.githubusercontent.com/{owner}/{repo}/{branch}/splash/{filename}.png"
+RAW_IMAGE_URL = "https://raw.githubusercontent.com/{owner}/{repo}/{branch}/splash/{filename}.bmp"
 
 class UF2Widget(QWidget):
     def __init__(self, owner, repo, branch, asset, tag_name):
@@ -254,8 +254,7 @@ class UF2Widget(QWidget):
         self.repo = repo
         self.branch = branch
         self.asset = asset
-        self.tag_name = tag_name
-
+        self.splash_base = asset['name'].rsplit('.', 1)[0]  # <<< Corrected
         self.init_ui()
 
     def init_ui(self):
@@ -288,34 +287,39 @@ class UF2Widget(QWidget):
 
 
     def fetch_splash(self):
-        url_primary = RAW_IMAGE_URL.format(owner=self.owner, repo=self.repo, branch=self.branch, filename=self.tag_name)
-        url_backup = RAW_IMAGE_URL.format(owner="KOINSLOT-Inc", repo="kywy-loader", branch="main", filename=self.tag_name)
-        url_default = RAW_IMAGE_URL.format(owner="KOINSLOT-Inc", repo="kywy-loader", branch="main", filename="default")
+        filename_base = self.splash_base
+        extensions = ["png", "bmp", "jpg"]
 
-        print(f"[DEBUG] Trying primary splash URL: {url_primary}")
-        try:
-            resp = requests.get(url_primary, timeout=5, verify=False)
-            if resp.status_code == 200:
-                pixmap = QPixmap()
-                pixmap.loadFromData(BytesIO(resp.content).read())
-                return pixmap
-            else:
-                print(f"[DEBUG] Primary splash not found, status: {resp.status_code}")
-        except Exception as e:
-            print(f"[DEBUG] Primary splash error: {e}")
+        for ext in extensions:
+            url_primary = f"https://raw.githubusercontent.com/{self.owner}/{self.repo}/{self.branch}/splash/{filename_base}.{ext}"
+            url_backup = f"https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/{filename_base}.{ext}"
 
-        print(f"[DEBUG] Trying backup splash URL: {url_backup}")
-        try:
-            resp = requests.get(url_backup, timeout=5, verify=False)
-            if resp.status_code == 200:
-                pixmap = QPixmap()
-                pixmap.loadFromData(BytesIO(resp.content).read())
-                return pixmap
-            else:
-                print(f"[DEBUG] Backup splash not found, status: {resp.status_code}")
-        except Exception as e:
-            print(f"[DEBUG] Backup splash error: {e}")
+            print(f"[DEBUG] Trying primary splash URL: {url_primary}")
+            try:
+                resp = requests.get(url_primary, timeout=5, verify=False)
+                if resp.status_code == 200:
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(BytesIO(resp.content).read())
+                    return pixmap
+                else:
+                    print(f"[DEBUG] Primary splash not found, status: {resp.status_code}")
+            except Exception as e:
+                print(f"[DEBUG] Primary splash error: {e}")
 
+            print(f"[DEBUG] Trying backup splash URL: {url_backup}")
+            try:
+                resp = requests.get(url_backup, timeout=5, verify=False)
+                if resp.status_code == 200:
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(BytesIO(resp.content).read())
+                    return pixmap
+                else:
+                    print(f"[DEBUG] Backup splash not found, status: {resp.status_code}")
+            except Exception as e:
+                print(f"[DEBUG] Backup splash error: {e}")
+
+        # Try default fallback (default.png only)
+        url_default = "https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/default.png"
         print(f"[DEBUG] Trying default splash URL: {url_default}")
         try:
             resp = requests.get(url_default, timeout=5, verify=False)
@@ -328,8 +332,43 @@ class UF2Widget(QWidget):
         except Exception as e:
             print(f"[DEBUG] Default splash error: {e}")
 
+        print(f"[DEBUG] No splash art found for {filename_base}")
+        return None
+
+
+        # Try backup repo
+        for ext in extensions:
+            url_backup = f"https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/{self.tag_name}.{ext}"
+            print(f"[DEBUG] Trying backup splash URL: {url_backup}")
+            try:
+                resp = requests.get(url_backup, timeout=5, verify=False)
+                if resp.status_code == 200:
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(BytesIO(resp.content).read())
+                    return pixmap
+                else:
+                    print(f"[DEBUG] Backup splash not found, status: {resp.status_code}")
+            except Exception as e:
+                print(f"[DEBUG] Backup splash error: {e}")
+
+        # Try default splash
+        for ext in extensions:
+            url_default = f"https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/default.{ext}"
+            print(f"[DEBUG] Trying default splash URL: {url_default}")
+            try:
+                resp = requests.get(url_default, timeout=5, verify=False)
+                if resp.status_code == 200:
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(BytesIO(resp.content).read())
+                    return pixmap
+                else:
+                    print(f"[DEBUG] Default splash not found, status: {resp.status_code}")
+            except Exception as e:
+                print(f"[DEBUG] Default splash error: {e}")
+
         print(f"[DEBUG] No splash art found for {self.tag_name}")
         return None
+
 
 
 
