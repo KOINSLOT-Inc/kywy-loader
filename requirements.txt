@@ -1,0 +1,5 @@
+PyQt6>=6.0.0
+pyserial>=3.5
+requests>=2.25.1
+pyudev>=0.22
+
