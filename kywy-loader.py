@@ -202,6 +202,13 @@ def list_possible_drives():
     return drives
 
 def download_uf2(url, target_filename):
+    if url.startswith("file://"):
+        local_path = url[7:]
+        if not os.path.isfile(local_path):
+            raise Exception(f"Local UF2 not found: {local_path}")
+        print(f"[DEBUG] Using local UF2 file: {local_path}")
+        return local_path
+
     resp = requests.get(url)
     if resp.status_code == 200:
         tmp_dir = tempfile.gettempdir()
@@ -278,7 +285,10 @@ class UF2Widget(QWidget):
 
         layout.addWidget(self.splash_label)
 
-        text_label = QLabel(self.asset['name'])
+        label_text = self.asset['name']
+        if self.owner == "local":
+            label_text = f"local {label_text}"
+        text_label = QLabel(label_text)
         text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         text_label.setWordWrap(True)
         layout.addWidget(text_label)
@@ -293,6 +303,16 @@ class UF2Widget(QWidget):
     def fetch_splash(self):
         filename_base = self.splash_base
         extensions = ["png", "bmp", "jpg"]
+
+        # First check local ./splash folder
+        local_splash_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "splash")
+        for ext in extensions:
+            local_path = os.path.join(local_splash_dir, f"{filename_base}.{ext}")
+            if os.path.exists(local_path):
+                print(f"[DEBUG] Using local splash: {local_path}")
+                pixmap = QPixmap(local_path)
+                if not pixmap.isNull():
+                    return pixmap
 
         for ext in extensions:
             url_primary = f"https://raw.githubusercontent.com/{self.owner}/{self.repo}/{self.branch}/splash/{filename_base}.{ext}"
@@ -410,6 +430,22 @@ class UF2InstallerApp(QWidget):
     def load_all_releases(self):
         for owner, repo, branch in self.repos:
             self.load_latest_release(owner, repo, branch)
+
+        self.load_local_uf2_files()  # Add this line
+
+    def load_local_uf2_files(self):
+        folder = os.path.dirname(os.path.realpath(__file__))
+        for fname in os.listdir(folder):
+            if fname.endswith(".uf2"):
+                local_path = os.path.join(folder, fname)
+                print(f"[DEBUG] Found local UF2 file: {local_path}")
+                asset = {
+                    "name": fname,
+                    "browser_download_url": f"file://{local_path}"
+                }
+                widget = UF2Widget("local", "local", "main", asset, "local")
+                self.uf2_widgets.append(widget)
+        self.rebuild_grid()
 
     def load_latest_release(self, owner, repo, branch):
         url = GITHUB_API_LATEST.format(owner=owner, repo=repo)
