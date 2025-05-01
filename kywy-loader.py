@@ -23,8 +23,10 @@ from PyQt6.QtCore import Qt, QTimer
 def find_rp2040_serial():
     ports = serial.tools.list_ports.comports()
     for port in ports:
-        if (port.vid == 0x2E8A):  # Raspberry Pi Foundation VID
+        if port.manufacturer and "koinslot" in port.manufacturer.lower():
+            print(f"[DEBUG] Found Koinslot RP2040 serial at {port.device} (manufacturer: {port.manufacturer})")
             return port.device
+    print("[DEBUG] No Koinslot RP2040 serial device found.")
     return None
 
 def touch_1200_baud(serial_port_name):
@@ -226,7 +228,9 @@ def install_uf2_procedure(download_url, target_filename):
 
         print(f"[DEBUG] Found serial port: {port}, sending 1200 baud touch...")
         touch_1200_baud(port)
-
+        time.sleep(0.5)
+        touch_1200_baud(port)
+        time.sleep(5)
         print("[DEBUG] Waiting for RPI-RP2 drive to appear after reboot...")
         drive = find_rp2040_drive(timeout=10)
         if not drive:
