@@ -20,14 +20,22 @@ from PyQt6.QtCore import Qt, QTimer
 
 # -------- Flashing Helpers --------
 
+
 def find_rp2040_serial():
     ports = serial.tools.list_ports.comports()
     for port in ports:
-        if port.manufacturer and "koinslot" in port.manufacturer.lower():
-            print(f"[DEBUG] Found Koinslot RP2040 serial at {port.device} (manufacturer: {port.manufacturer})")
+        vid = f"{port.vid:04x}" if port.vid else None
+        pid = f"{port.pid:04x}" if port.pid else None
+
+        # Match known Koinslot manufacturer or VID:PID of Arduino Pico
+        if (
+            (port.manufacturer and "koinslot" in port.manufacturer.lower()) or
+            (vid == "2e8a" and pid == "00c0")
+        ):
+            print(f"[DEBUG] Found RP2040 serial at {port.device} (VID:PID={vid}:{pid}, manufacturer={port.manufacturer})")
             return port.device
-    print("[DEBUG] No Koinslot RP2040 serial device found.")
     return None
+
 
 def touch_1200_baud(serial_port_name):
     try:
