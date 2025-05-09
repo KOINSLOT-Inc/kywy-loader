@@ -284,16 +284,20 @@ class UF2Widget(QWidget):
         self.splash_label.setFixedSize(144, 168)
         self.splash_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.splash_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-        pixmap = self.fetch_splash()
-        if pixmap:
-            self.splash_label.setPixmap(pixmap.scaled(168, 144, Qt.AspectRatioMode.KeepAspectRatio))
-        else:
-            self.splash_label.setStyleSheet("background-color: #cccccc; border: 1px solid #000000;")
-
+        # Show placeholder immediately with green fill and no border
+        self.splash_label.setStyleSheet("background-color: #ccffcc;")
         layout.addWidget(self.splash_label)
 
+        # Start loading splash in background
+        self.load_splash_async()
+
+        # Remove .uf2 extension from display
         label_text = self.asset['name']
+        if label_text.endswith(".uf2"):
+            label_text = label_text[:-4]
+        # Append .rs for kywy-rust repo
+        if str(self.owner).lower() == "koinslot-inc" and str(self.repo).lower() == "kywy-rust":
+            label_text += ".rs"
         if self.owner == "local":
             label_text = f"local {label_text}"
         text_label = QLabel(label_text)
@@ -315,51 +319,93 @@ class UF2Widget(QWidget):
 
         self.setLayout(layout)
 
+    def load_splash_async(self):
+        # Use a thread to load splash and update label when ready
+        from PyQt6.QtCore import QThread, pyqtSignal, QObject
+
+        class SplashLoader(QObject):
+            finished = pyqtSignal(QPixmap)
+            def __init__(self, fetch_func):
+                super().__init__()
+                self.fetch_func = fetch_func
+            def run(self):
+                pixmap = self.fetch_func()
+                self.finished.emit(pixmap if pixmap else QPixmap())
+
+        self.splash_thread = QThread()
+        self.splash_worker = SplashLoader(self.fetch_splash)
+        self.splash_worker.moveToThread(self.splash_thread)
+        self.splash_thread.started.connect(self.splash_worker.run)
+        self.splash_worker.finished.connect(self.on_splash_loaded)
+        self.splash_worker.finished.connect(self.splash_thread.quit)
+        self.splash_worker.finished.connect(self.splash_worker.deleteLater)
+        self.splash_thread.finished.connect(self.splash_thread.deleteLater)
+        self.splash_thread.start()
+
+    def on_splash_loaded(self, pixmap):
+        if not pixmap.isNull():
+            self.splash_label.setPixmap(pixmap.scaled(168, 144, Qt.AspectRatioMode.KeepAspectRatio))
+            self.splash_label.setStyleSheet("background-color: #ccffcc;")
+        else:
+            self.splash_label.setStyleSheet("background-color: #ccffcc;")
+
 
     def fetch_splash(self):
+        # This method is now used in a background thread
         filename_base = self.splash_base
+        if filename_base.endswith(".ino"):
+            filename_base = filename_base[:-4]
         extensions = ["png", "bmp", "jpg"]
 
-        # First check local ./splash folder
+        # First check local ./splash folder with normalization
         local_splash_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "splash")
-        for ext in extensions:
-            local_path = os.path.join(local_splash_dir, f"{filename_base}.{ext}")
-            if os.path.exists(local_path):
-                print(f"[DEBUG] Using local splash: {local_path}")
-                pixmap = QPixmap(local_path)
-                if not pixmap.isNull():
-                    return pixmap
+        def normalize_name(name):
+            return name.lower().replace(" ", "").replace("_", "")
+        normalized_base = normalize_name(filename_base)
+        for fname in os.listdir(local_splash_dir):
+            for ext in extensions:
+                if fname.lower().endswith(f".{ext}"):
+                    base_part = fname[:-(len(ext)+1)]
+                    if normalize_name(base_part) == normalized_base:
+                        local_path = os.path.join(local_splash_dir, fname)
+                        pixmap = QPixmap(local_path)
+                        if not pixmap.isNull():
+                            return pixmap
 
         error_summary = []
-        found = False
 
         for ext in extensions:
-            url_primary = f"https://raw.githubusercontent.com/{self.owner}/{self.repo}/{self.branch}/splash/{filename_base}.{ext}"
-            url_backup = f"https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/{filename_base}.{ext}"
+            remote_variants = [
+                filename_base,
+                filename_base.replace("_", " "),
+                filename_base.replace(" ", "_")
+            ]
+            for variant in set(remote_variants):
+                url_primary = f"https://raw.githubusercontent.com/{self.owner}/{self.repo}/{self.branch}/splash/{variant}.{ext}"
+                url_backup = f"https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/{variant}.{ext}"
 
-            try:
-                resp = requests.get(url_primary, timeout=5)
-                if resp.status_code == 200:
-                    pixmap = QPixmap()
-                    pixmap.loadFromData(BytesIO(resp.content).read())
-                    return pixmap
-                else:
-                    error_summary.append(f"Primary splash not found ({url_primary}), status: {resp.status_code}")
-            except Exception as e:
-                error_summary.append(f"Primary splash error ({url_primary}): {e}")
+                try:
+                    resp = requests.get(url_primary, timeout=5)
+                    if resp.status_code == 200:
+                        pixmap = QPixmap()
+                        pixmap.loadFromData(BytesIO(resp.content).read())
+                        return pixmap
+                    else:
+                        error_summary.append(f"Primary splash not found ({url_primary}), status: {resp.status_code}")
+                except Exception as e:
+                    error_summary.append(f"Primary splash error ({url_primary}): {e}")
 
-            try:
-                resp = requests.get(url_backup, timeout=5)
-                if resp.status_code == 200:
-                    pixmap = QPixmap()
-                    pixmap.loadFromData(BytesIO(resp.content).read())
-                    return pixmap
-                else:
-                    error_summary.append(f"Backup splash not found ({url_backup}), status: {resp.status_code}")
-            except Exception as e:
-                error_summary.append(f"Backup splash error ({url_backup}): {e}")
+                try:
+                    resp = requests.get(url_backup, timeout=5)
+                    if resp.status_code == 200:
+                        pixmap = QPixmap()
+                        pixmap.loadFromData(BytesIO(resp.content).read())
+                        return pixmap
+                    else:
+                        error_summary.append(f"Backup splash not found ({url_backup}), status: {resp.status_code}")
+                except Exception as e:
+                    error_summary.append(f"Backup splash error ({url_backup}): {e}")
 
-        # Try default fallback (default.png only)
         url_default = "https://raw.githubusercontent.com/KOINSLOT-Inc/kywy-loader/main/splash/default.png"
         try:
             resp = requests.get(url_default, timeout=5)
@@ -371,6 +417,12 @@ class UF2Widget(QWidget):
                 error_summary.append(f"Default splash not found ({url_default}), status: {resp.status_code}")
         except Exception as e:
             error_summary.append(f"Default splash error ({url_default}): {e}")
+
+        local_default_bmp = os.path.join(local_splash_dir, "default.bmp")
+        if os.path.exists(local_default_bmp):
+            pixmap = QPixmap(local_default_bmp)
+            if not pixmap.isNull():
+                return pixmap
 
         if error_summary:
             print(f"[SPLASH ERROR] Could not load splash for {filename_base}. First error: {error_summary[0]}")
