@@ -1,4 +1,4 @@
-PyQt6>=6.0.0
+PyQt6>=6.0.0  # Note: QAction is in PyQt6.QtGui
 pyserial>=3.5
 requests>=2.25.1
 pyudev>=0.22
