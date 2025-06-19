@@ -549,7 +549,10 @@ class UF2InstallerApp(QWidget):
                     parts = [x.strip() for x in line.strip().split(",")]
                     if len(parts) == 4:
                         owner, repo, branch, commit_hash = parts
-                        repo_list.append(f"https://github.com/{owner}/{repo} [{branch}] ({commit_hash[:7]})")
+                        if commit_hash == "official":
+                            repo_list.append(f"https://github.com/{owner}/{repo} [{branch}] (official)")
+                        else:
+                            repo_list.append(f"https://github.com/{owner}/{repo} [{branch}] ({commit_hash[:7]})")
         if not repo_list:
             repo_list = ["No repos added."]
         QMessageBox.information(self, "Current Repos", "\n".join(repo_list))
@@ -607,15 +610,20 @@ class UF2InstallerApp(QWidget):
         if not os.path.exists(self.REPO_FILE) or os.stat(self.REPO_FILE).st_size == 0:
             with open(self.REPO_FILE, "w") as f:
                 for owner, repo, branch in default_repos:
-                    commit_hash = self.get_latest_commit_hash(owner, repo, branch)
-                    if commit_hash:
-                        f.write(f"{owner},{repo},{branch},{commit_hash}\n")
+                    # Use "official" placeholder for default repos
+                    f.write(f"{owner},{repo},{branch},official\n")
         with open(self.REPO_FILE, "r") as f:
             for line in f:
                 parts = [x.strip() for x in line.strip().split(",")]
                 if len(parts) == 4:
                     owner, repo, branch, commit_hash = parts
-                    # Validate commit hash
+                    
+                    # Skip commit hash validation for "official" repos
+                    if commit_hash == "official":
+                        self.repos.append((owner, repo, branch))
+                        continue
+                    
+                    # Validate commit hash for non-official repos
                     latest_hash = self.get_latest_commit_hash(owner, repo, branch)
                     if latest_hash and latest_hash != commit_hash:
                         update = self.ask_update_commit(owner, repo, branch, commit_hash, latest_hash)
