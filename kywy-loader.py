@@ -740,10 +740,8 @@ class UF2InstallerApp(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    repos = [
-        ("KOINSLOT-Inc", "kywy-rust", "main"),
-        ("KOINSLOT-Inc", "kywy", "main"),
-    ]
+    # Start with empty repos list - they will be loaded from repos.txt file
+    repos = []
 
     window = UF2InstallerApp(repos)
     window.setWindowTitle("UF2 Installer for Kywy Devices")
